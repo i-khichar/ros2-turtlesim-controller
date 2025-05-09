@@ -12,7 +12,7 @@ This project is a **MERN (MongoDB, Express, React, Node.js)** application that i
 
 ##  Demo Screenshot and Video Link
 ![mockup](./docs/ui-mockup.png)
-https://drive.google.com/file/d/1QljVEQP9m9RC5Q_Wm1BJUaTTF84Xsvmb/view?usp=sharing
+https://drive.google.com/file/d/1C25HMmQzT5F2wtXb8LYRGPz9ytSDT106/view?usp=sharing
 ---
 
 ## Architecture Overview
