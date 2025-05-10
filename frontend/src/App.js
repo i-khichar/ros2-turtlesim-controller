@@ -132,10 +132,9 @@ function App() {
   };
 
   const savePath = async () => {
-    setPathName(
-      prompt("Enter path name:")
-    );
-    if (!pathName) return;
+    const name = prompt("Enter path name:");
+    if (!name) return;
+    setPathName(name);
     const payload = {
       pathName,
       trail,
@@ -202,16 +201,18 @@ function App() {
     }
 
     //seems unnecessary since there is a websocket subscription to the turtle pose
-    setX(startStation.x);
-    setY(startStation.y);
-    setTheta(0);
+    // setX(startStation.x);
+    // setY(startStation.y);
+    // setTheta(0);
 
     //teleport the turtle to the start station
     if(webSocketConnection && webSocketConnection.readyState === WebSocket.OPEN) {
+      const worldX = (startStation.x / canvasSize.width) * 11;
+      const worldY = 11 - (startStation.y / canvasSize.height) * 11;
       webSocketConnection.send(JSON.stringify({
         type: 'teleport',
-        x: startStation.x,
-        y: startStation.y,
+        x: startStation.worldX,
+        y: startStation.worldY,
         theta: 0
       }));
     }
