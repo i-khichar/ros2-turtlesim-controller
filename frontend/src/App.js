@@ -126,21 +126,21 @@ function App() {
     if (!marking) {
       setStartStation({ x, y });
       setEndStation(null);
-      setTrail([{ x, y }]);
+      // setTrail([{ x, y }]);
     }
     setMarking(prev => !prev);
   };
 
   const savePath = async () => {
     const name = prompt("Enter path name:");
-    if (!name) return;
-    setPathName(name);
+    // if (!name) return;
     const payload = {
-      pathName,
+      pathName: name,
       trail,
       startStation,
       endStation
     };
+    console.log(payload);
     try {
       const response = await fetch('/api/savePath', {
         method: 'POST',
@@ -153,10 +153,11 @@ function App() {
       console.error(err);
       alert('Failed to save path');
     }
+    setPathName(name);
   };
 
   const startMission = async () => {
-    if (!startStation || trail.length < 2) {
+    if (!startStation) {
       alert('No path to follow!');
       return;
     }
@@ -176,17 +177,16 @@ function App() {
       return;
     }
 
-    setMissionStatus(true);
     //fetching path from mongoDB
     //we have to fetch path from the backend (mongoDB) and then move the turtle along the path depending on the start and end station
-    const response = await fetch('/api/getPath', {
-      method: 'POST',
+    const response = await fetch(`/api/getPath?pathName=${pathName}`, {
+      method: 'GET',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({pathName}) //TODO: add fetching path from mongoDB to backend
     });
-
+    
     const data = await response.json();
-    if (!data || !data.path) {
+    console.log("here" + data.path);
+    if (!data || !data.result || !data.result.path) {
       alert('No path found!');
       return;
     }
@@ -196,15 +196,19 @@ function App() {
       for (let i = 0; i < data.path.coordinates.length; i++) {
         data.path.coordinates[i][1] = -data.path.coordinates[i][1];
       }
-      setStartStation(data.path.endStation);
-      setEndStation(data.path.startStation);
+      setStartStation(data.result.path.endStation);
+      setEndStation(data.result.path.startStation);
+    } else {
+      setStartStation(data.result.path.startStation);
+      setEndStation(data.result.path.endStation);
     }
 
     //seems unnecessary since there is a websocket subscription to the turtle pose
     // setX(startStation.x);
     // setY(startStation.y);
     // setTheta(0);
-
+    
+    setMissionStatus(true);
     //teleport the turtle to the start station
     if(webSocketConnection && webSocketConnection.readyState === WebSocket.OPEN) {
       const worldX = (startStation.x / canvasSize.width) * 11;
@@ -217,12 +221,12 @@ function App() {
       }));
     }
 
-    for (let i = 0; i < data.path.coordinates.length; i++) {
+    for (let i = 0; i < data.result.path.coordinates.length; i++) {
       await new Promise(res => setTimeout(res, 300)); // delay for visible movement
-      move(data.path.coordinates[i][0], data.path.coordinates[i][1]);
+      move(data.result.path.coordinates[i][0], data.result.path.coordinates[i][1]);
     }
 
-    setMissionStatus(false)
+    setMissionStatus(false);
   };
 
   const swapStations = () => {

@@ -71,9 +71,10 @@ poseListener.subscribe((pose) => {
   });
 });
 
-// Save path to mongo
+// Save path to mongo - check why name is null TODO
 app.post('/api/savePath', async (req, res) => {
   try {
+    console.log(req.body)
     const { pathName, trail, startStation, endStation } = req.body;
 
     const coordinates = trail.map(p => [p.distance, p.rotation]);
@@ -99,6 +100,20 @@ app.post('/api/savePath', async (req, res) => {
   } catch (err) {
     console.error('Error saving path:', err);
     res.status(500).json({ error: 'Failed to save path' });
+  }
+});
+
+app.get('/api/getPath', async (req, res) => {
+  try {
+    const db = mongoClient.db(DATABASE_NAME);
+    const collection = db.collection(COLLECTION_NAME);
+    console.log(req.query);
+    const pathName = req.query.pathName;
+    const result = await collection.findOne({name: pathName});
+    res.json({result});
+  } catch (err) {
+    console.error('Error getting path:', err);
+    res.status(500).json({ error: 'Failed to get path' });
   }
 });
 
@@ -147,8 +162,9 @@ wss.on('connection', (ws) => {
           linear: { x: data.linearX, y: 0, z: 0 },
           angular: { x: 0, y: 0, z: data.angularZ }
         });
-        velocityPublisher.publish(twist);
-        console.log('Turtle moved:', result);
+        velocityPublisher.publish(twist, (result) => {
+          console.log('Turtle moved:', result)
+        });
       }
 
     } catch (err) {
