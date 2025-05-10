@@ -49,14 +49,34 @@ ros.on('close', () => {
   console.log('Connection to ROS bridge closed.');
 });
 
+const poseListener = new ROSLIB.Topic({
+  ros: ros,
+  name: '/turtle1/pose',
+  messageType: 'turtlesim/Pose'
+});
+poseListener.subscribe((pose) => {
+  //console.log('Turtle pose:', pose);
+  // Here you can send the pose data to the frontend if needed
+  const message = JSON.stringify({
+    type: 'pose',
+    x: pose.x,
+    y: pose.y
+  });
 
+  // Broadcast the pose to all connected frontend clients
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+});
 
 // Save path to mongo
 app.post('/api/savePath', async (req, res) => {
   try {
     const { pathName, trail, startStation, endStation } = req.body;
 
-    const coordinates = trail.map(p => [p.x, p.y]);
+    const coordinates = trail.map(p => [p.distance, p.rotation]);
     const db = mongoClient.db(DATABASE_NAME);
     const collection = db.collection(COLLECTION_NAME);
 
@@ -90,6 +110,13 @@ const teleportPublisher = new ROSLIB.Service({
   serviceType: 'turtlesim/srv/TeleportAbsolute'
 });
 
+//Publisher to move turtle
+const velocityPublisher = new ROSLIB.Topic({
+  ros: ros,
+  name: '/turtle1/cmd_vel',
+  messageType: 'geometry_msgs/Twist'
+});
+
 
 wss.on('connection', (ws) => {
   console.log('Frontend connected to backend websocket.');
@@ -113,12 +140,16 @@ wss.on('connection', (ws) => {
 
       }
 
-      // If using cmd_vel, publish velocity:
-      // const twist = new ROSLIB.Message({
-      //   linear: { x: data.linearX, y: 0, z: 0 },
-      //   angular: { x: 0, y: 0, z: data.angularZ }
-      // });
-      // velocityPublisher.publish(twist);
+      if(data.type === 'move') {
+        console.log('Received from frontend:', data);
+
+        const twist = new ROSLIB.Message({
+          linear: { x: data.linearX, y: 0, z: 0 },
+          angular: { x: 0, y: 0, z: data.angularZ }
+        });
+        velocityPublisher.publish(twist);
+        console.log('Turtle moved:', result);
+      }
 
     } catch (err) {
       console.error('Invalid message received:', err);

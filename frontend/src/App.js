@@ -5,25 +5,37 @@ function App() {
   const [canvasSize, setCanvasSize] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [x, setX] = useState(window.innerWidth / 2);
   const [y, setY] = useState(window.innerHeight / 2);
-  const [marking, setMarking] = useState(false);
-  const [trail, setTrail] = useState([]);
-  const [startStation, setStartStation] = useState(null);
+  const [theta, setTheta] = useState(0); // angle in radians
+  const [marking, setMarking] = useState(false); // true if marking path
+  const [trail, setTrail] = useState([]); // array of points - linearX, angularZ
+  const [startStation, setStartStation] = useState(null);  //TODO: make 2 stations and we can choose which one to start from
   const [endStation, setEndStation] = useState(null);
   const [missionStatus, setMissionStatus] = useState(false);
-  const [ws, setWs] = useState(null);
-
-  function mapUiToTurtle(uiX, uiY, canvasWidth, canvasHeight) {
-    const turtleX = (uiX / canvasWidth) * 11;
-    const turtleY = 11 - (uiY / canvasHeight) * 11;
-    return { turtleX, turtleY };
-  }  
+  const [webSocketConnection, setWebSocketConnection] = useState(null); //webSocketConnection is the websocket connection
+  let reversedPath = false; // true if path is reversed
+  const [pathName, setPathName] = useState(null); // path name to be saved  
 
   useEffect(() => {
-    const socket = new WebSocket('ws://localhost:8080');
-    socket.onopen = () => console.log('WebSocket connected');
-    setWs(socket);
+    const socket = new WebSocket('ws://localhost:8080');  //websocked connection to the backend
+    socket.onopen = () => {
+      console.log('WebSocket connected');
+    };
+    setWebSocketConnection(socket);
     return () => socket.close();
   }, []);
+
+  useEffect(() => {
+    if(!webSocketConnection) return;
+    webSocketConnection.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'pose') {
+        const canvasX = (data.x / 11) * canvasSize.width;
+        const canvasY = canvasSize.height - (data.y / 11) * canvasSize.height;
+        setX(canvasX);
+        setY(canvasY);
+      }
+  };
+}, [webSocketConnection, canvasSize, marking]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -57,37 +69,58 @@ function App() {
 
     ctx.fillStyle = 'blue';
     ctx.fillRect(x - 10, y - 10, 20, 20);
+
   }, [x, y, trail, startStation, endStation, canvasSize]);
 
-  const move = (dx, dy) => {
-    if(missionStatus) return;
-    let newX = Math.max(10, Math.min(canvasSize.width - 10, x + dx));
-    let newY = Math.max(10, Math.min(canvasSize.height - 10, y + dy));
-    setX(newX);
-    setY(newY);
-    if (marking) setTrail(prev => [...prev, { x: newX, y: newY }]);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const { turtleX, turtleY } = mapUiToTurtle(newX, newY, canvasSize.width, canvasSize.height);
-      ws.send(JSON.stringify({
-        type: 'teleport',
-        x: turtleX,
-        y: turtleY,
-        theta: 0
+  const move = (distance, rotation) => {
+    // if(missionStatus) return;
+    // Only push if it's different from the last point to avoid duplicates
+    if (marking) {
+      if(trail.length === 0 || trail[trail.length - 1].distance !== distance || trail[trail.length - 1].rotation !== rotation) {
+        setTrail(prev => [...prev, { distance, rotation }]);
+      }
+    }
+
+    let linearX = 0;
+    let angularZ = 0;
+
+    if(distance === -5 && rotation === 0) linearX = 0.5;
+    if(distance === 5 && rotation === 0 ) linearX = -0.5; 
+    if(distance === 0 && rotation === -5) angularZ = 1;
+    if(distance === 0 && rotation === 5) angularZ = -1;
+    if (webSocketConnection && webSocketConnection.readyState === WebSocket.OPEN) {
+      webSocketConnection.send(JSON.stringify({
+        type: 'move',
+        linearX,
+        angularZ
       }));
     }
   };
 
   const handleKey = (e) => {
-    if (e.key === 'ArrowUp') move(0, -10);
-    if (e.key === 'ArrowDown') move(0, 10);
-    if (e.key === 'ArrowLeft') move(-10, 0);
-    if (e.key === 'ArrowRight') move(10, 0);
+    if (e.key === 'ArrowUp') move(-5, 0);
+    if (e.key === 'ArrowDown') move(5, 0);
+    if (e.key === 'ArrowLeft') move(0, -5);
+    if (e.key === 'ArrowRight') move(0, 5);
   };
 
   useEffect(() => {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [x, y, marking, canvasSize]);
+
+  const handleKeyUp = () => {
+    if(webSocketConnection && webSocketConnection.readyState === WebSocket.OPEN) {
+      webSocketConnection.send(JSON.stringify({
+        type: 'stop'
+      }));
+    }
+  };
+  useEffect(() => {
+    window.addEventListener('keyup', handleKeyUp);
+    return () => window.removeEventListener('keyup', handleKeyUp);
+  }, [webSocketConnection]);
+
 
   const toggleMarking = () => {
     if (!marking) {
@@ -99,7 +132,9 @@ function App() {
   };
 
   const savePath = async () => {
-    const pathName = prompt("Enter path name:");
+    setPathName(
+      prompt("Enter path name:")
+    );
     if (!pathName) return;
     const payload = {
       pathName,
@@ -137,38 +172,61 @@ function App() {
       return;
     }
 
-    setMissionStatus(true);
+    if(!pathName) {
+      alert('Please set path name!');
+      return;
+    }
 
+    setMissionStatus(true);
+    //fetching path from mongoDB
+    //we have to fetch path from the backend (mongoDB) and then move the turtle along the path depending on the start and end station
+    const response = await fetch('/api/getPath', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({pathName}) //TODO: add fetching path from mongoDB to backend
+    });
+
+    const data = await response.json();
+    if (!data || !data.path) {
+      alert('No path found!');
+      return;
+    }
+    //TO DO: if(reversedPath) implement the reverse path
+    if(reversedPath) {
+      data.path.coordinates.reverse();
+      for (let i = 0; i < data.path.coordinates.length; i++) {
+        data.path.coordinates[i][1] = -data.path.coordinates[i][1];
+      }
+      setStartStation(data.path.endStation);
+      setEndStation(data.path.startStation);
+    }
+
+    //seems unnecessary since there is a websocket subscription to the turtle pose
     setX(startStation.x);
     setY(startStation.y);
-  
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      const { turtleX, turtleY } = mapUiToTurtle(startStation.x, startStation.y, canvasSize.width, canvasSize.height);
-      ws.send(JSON.stringify({
+    setTheta(0);
+
+    //teleport the turtle to the start station
+    if(webSocketConnection && webSocketConnection.readyState === WebSocket.OPEN) {
+      webSocketConnection.send(JSON.stringify({
         type: 'teleport',
-        x: turtleX,
-        y: turtleY,
+        x: startStation.x,
+        y: startStation.y,
         theta: 0
       }));
     }
-  
-    for (let i = 0; i < trail.length; i++) {
+
+    for (let i = 0; i < data.path.coordinates.length; i++) {
       await new Promise(res => setTimeout(res, 300)); // delay for visible movement
-      setX(trail[i].x);
-      setY(trail[i].y);
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        const { turtleX, turtleY } = mapUiToTurtle(trail[i].x, trail[i].y, canvasSize.width, canvasSize.height);
-        ws.send(JSON.stringify({
-          type: 'teleport',
-          x: turtleX,
-          y: turtleY,
-          theta: 0
-        }));
-      }
+      move(data.path.coordinates[i][0], data.path.coordinates[i][1]);
     }
 
     setMissionStatus(false)
   };
+
+  const swapStations = () => {
+    reversedPath = !reversedPath;
+  }
 
   return (
     <div>
@@ -199,6 +257,11 @@ function App() {
             Save Path
           </button>
         )}
+        {startStation && endStation && (
+          <button onClick={swapStations}>
+          Swap Start and End Stations
+          </button>
+        )}
       </div>
 
       {/* Arrow keys bottom-right */}
@@ -212,11 +275,11 @@ function App() {
         gap: '5px'
       }}>
         <div></div>
-        <button onClick={() => move(0, -10)}>↑</button>
+        <button onClick={() => move(-5, 0)}>↑</button>
         <div></div>
-        <button onClick={() => move(-10, 0)}>←</button>
-        <button onClick={() => move(0, 10)}>↓</button>
-        <button onClick={() => move(10, 0)}>→</button>
+        <button onClick={() => move(0, -5)}>←</button>
+        <button onClick={() => move(5, 0)}>↓</button>
+        <button onClick={() => move(0, 5)}>→</button>
       </div>
     </div>
   );
