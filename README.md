@@ -62,9 +62,11 @@ DATABASE_NAME=your_database_name
 COLLECTION_NAME=paths
 
 4. Start ROS WebSocket bridge (in a separate terminal):
+source /opt/ros/humble/setup.bash
 ros2 launch rosbridge_server rosbridge_websocket_launch.xml
 
 5. Start turtlesim (in another separate terminal):
+source /opt/ros/humble/setup.bash
 ros2 run turtlesim turtlesim_node
 
 6. Run the backend server: 

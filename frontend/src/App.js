@@ -14,6 +14,7 @@ function App() {
   const [webSocketConnection, setWebSocketConnection] = useState(null); //webSocketConnection is the websocket connection
   let reversedPath = false; // true if path is reversed
   const [pathName, setPathName] = useState(null); // path name to be saved  
+  const [drawpath, setDrawPath] = useState([]); // array of points drawn on canvas
 
   useEffect(() => {
     const socket = new WebSocket('ws://localhost:8080');  //websocked connection to the backend
@@ -33,6 +34,9 @@ function App() {
         const canvasY = canvasSize.height - (data.y / 11) * canvasSize.height;
         setX(canvasX);
         setY(canvasY);
+        if(marking){
+          setDrawPath(prev => [...prev, { x: canvasX, y: canvasY }]);
+        }
       }
   };
 }, [webSocketConnection, canvasSize, marking]);
@@ -50,10 +54,10 @@ function App() {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
 
-    if (trail.length > 1) {
+    if (drawpath.length > 1) {
       ctx.beginPath();
-      ctx.moveTo(trail[0].x, trail[0].y);
-      trail.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.moveTo(drawpath[0].x, drawpath[0].y);
+      drawpath.forEach(p => ctx.lineTo(p.x, p.y));
       ctx.stroke();
     }
 
@@ -70,7 +74,7 @@ function App() {
     ctx.fillStyle = 'blue';
     ctx.fillRect(x - 10, y - 10, 20, 20);
 
-  }, [x, y, trail, startStation, endStation, canvasSize]);
+  }, [x, y, drawpath, startStation, endStation, canvasSize]);
 
   const move = (distance, rotation) => {
     // if(missionStatus) return;
@@ -126,7 +130,7 @@ function App() {
     if (!marking) {
       setStartStation({ x, y });
       setEndStation(null);
-      // setTrail([{ x, y }]);
+      setDrawPath([{ x, y }]);
     }
     setMarking(prev => !prev);
   };
@@ -185,16 +189,16 @@ function App() {
     });
     
     const data = await response.json();
-    console.log("here" + data.path);
+    console.log("here" + data.result.path);
     if (!data || !data.result || !data.result.path) {
       alert('No path found!');
       return;
     }
-    //TO DO: if(reversedPath) implement the reverse path
+
     if(reversedPath) {
-      data.path.coordinates.reverse();
-      for (let i = 0; i < data.path.coordinates.length; i++) {
-        data.path.coordinates[i][1] = -data.path.coordinates[i][1];
+      data.result.path.coordinates.reverse();
+      for (let i = 0; i < data.result.path.coordinates.length; i++) {
+        data.result.path.coordinates[i][1] = -data.result.path.coordinates[i][1];
       }
       setStartStation(data.result.path.endStation);
       setEndStation(data.result.path.startStation);
@@ -211,20 +215,24 @@ function App() {
     setMissionStatus(true);
     //teleport the turtle to the start station
     if(webSocketConnection && webSocketConnection.readyState === WebSocket.OPEN) {
-      const worldX = (startStation.x / canvasSize.width) * 11;
-      const worldY = 11 - (startStation.y / canvasSize.height) * 11;
+      const turtleX = (startStation.x / canvasSize.width) * 11;  //coordinates to the turtle world
+      const turtleY = 11 - (startStation.y / canvasSize.height) * 11;
       webSocketConnection.send(JSON.stringify({
         type: 'teleport',
-        x: startStation.worldX,
-        y: startStation.worldY,
+        x: turtleX,
+        y: turtleY,
         theta: 0
       }));
     }
 
-    for (let i = 0; i < data.result.path.coordinates.length; i++) {
-      await new Promise(res => setTimeout(res, 300)); // delay for visible movement
-      move(data.result.path.coordinates[i][0], data.result.path.coordinates[i][1]);
+    for (const [distance, rotation] of data.result.path.coordinates) {
+      console.log(distance, rotation);
+      move(distance, rotation);
     }
+    // for (let i = 0; i < data.result.path.coordinates.length; i++) {
+    //   await new Promise(res => setTimeout(res, 300)); // delay for visible movement
+    //   move(data.result.path.coordinates[i][0], data.result.path.coordinates[i][1]);
+    // }
 
     setMissionStatus(false);
   };
