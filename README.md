@@ -57,28 +57,28 @@ cd backend
 npm install
 
 3. Create a .env file:
-MONGO_URI=your_mongodb_connection_string
-DATABASE_NAME=your_database_name
-COLLECTION_NAME=paths
+- MONGO_URI=your_mongodb_connection_string
+- DATABASE_NAME=your_database_name
+- COLLECTION_NAME=paths
 
 4. Start ROS WebSocket bridge (in a separate terminal):
-source /opt/ros/humble/setup.bash
-ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+- source /opt/ros/humble/setup.bash
+- ros2 launch rosbridge_server rosbridge_websocket_launch.xml
 
 5. Start turtlesim (in another separate terminal):
-source /opt/ros/humble/setup.bash
-ros2 run turtlesim turtlesim_node
+- source /opt/ros/humble/setup.bash
+- ros2 run turtlesim turtlesim_node
 
 6. Run the backend server: 
-node index.js
+- node index.js
 Backend runs on: http://localhost:8080
 
 ### Frontend Setup
 1️. Go to the frontend folder:
-cd frontend
+- cd frontend
 
 2. Install dependencies:
-npm install
+- npm install
 
 3. Start the React app:
 npm start
